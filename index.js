@@ -1,6 +1,7 @@
 require("dotenv").config();
 const express    = require("express");
 const http       = require("http");
+const https      = require("https");
 const { Server } = require("socket.io");
 const cors       = require("cors");
 const { dbconnnect } = require("./config/dbconnect.js");
@@ -36,9 +37,18 @@ app.use((err, req, res, next) => {
 });
 
 const PORT = process.env.PORT || 2000;
-server.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
+server.listen(PORT, () => {
+  console.log(`🚀 Server running on port ${PORT}`);
 
-
+  // Keep Render free tier awake — pings every 14 minutes
+  setInterval(() => {
+    https.get("https://record-system-x75e.onrender.com/", (res) => {
+      console.log(`🏓 Keep-alive ping: ${res.statusCode}`);
+    }).on("error", (err) => {
+      console.error("Keep-alive error:", err.message);
+    });
+  }, 14 * 60 * 1000);
+});
 
 
 
