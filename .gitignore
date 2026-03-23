@@ -1,0 +1,28 @@
+# env files
+.env
+.env.*
+record-system-backend/.env
+# dependencies
+node_modules/
+
+# logs
+logs
+*.log
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# build
+dist/
+build/
+# Node modules
+node_modules/
+# seed
+seed.js/
+cleanRed.js/
+record-system-backend/seed.js/
+record-system-backend/cleanRed.js
+
+record-system-backend/node_modules/
+record-system-backend/.env
