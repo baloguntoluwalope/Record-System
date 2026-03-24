@@ -16,6 +16,7 @@ const {
   getPublicGame,
   getLeaderboard,
   resetLeaderboard,
+  toggleGameVoting
 } = require("../controllers/gameControllers.js");
 const { adminAuth, judgeAuth } = require("../middlewares/auth.js");
 const { scoreLimiter }         = require("../middlewares/rateLimiter.js");
@@ -36,7 +37,8 @@ router.post("/publish/:gameId",         adminAuth, publishGame);
 router.post("/unpublish/:gameId",       adminAuth, unpublishGame);
 router.put("/update/:gameId",           adminAuth, updateGame);
 router.delete("/delete/:gameId",        adminAuth, deleteGame);
-
+// PATCH /api/games/:gameId/toggle-voting
+router.patch("/:gameId/toggle-voting", adminAuth, toggleGameVoting);
 // Judge — parameterized (keep at bottom to avoid route conflicts)
 router.post("/:gameId/result",          judgeAuth, scoreLimiter, submitResult);
 router.post("/:category/:gender/score", judgeAuth, scoreLimiter, submitResultByCategoryAndGender);

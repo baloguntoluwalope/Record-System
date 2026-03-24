@@ -726,6 +726,27 @@ exports.submitMultipleScores = async (req, res) => {
   }
 };
 
+exports.toggleGameVoting = async (req, res) => {
+  try {
+    const { gameId } = req.params; // Must match :gameId in the route
+    const { enabled } = req.body;
+
+    const updatedGame = await Game.findOneAndUpdate(
+      { gameId: gameId }, // Searching your custom UUID field
+      { $set: { votingEnabled: enabled } },
+      { new: true }
+    );
+
+    if (!updatedGame) {
+      return res.status(404).json({ message: "Game not found." });
+    }
+
+    res.json({ votingEnabled: updatedGame.votingEnabled });
+  } catch (err) {
+    res.status(500).json({ message: "Server error" });
+  }
+};
+
 // const crypto   = require("crypto");
 // const { randomUUID } = require("crypto");
 // const mongoose = require("mongoose");

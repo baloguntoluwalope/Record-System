@@ -7,6 +7,7 @@ const cors       = require("cors");
 const { dbconnnect } = require("./config/dbconnect.js");
 const gameRouter  = require("./Routes/gameRouter.js");
 const authRouter  = require("./Routes/authRouter.js");
+const voteRouter = require("./Routes/voteRouter.js");
 
 const app    = express();
 const server = http.createServer(app);
@@ -22,6 +23,8 @@ app.set("io", io);
 
 app.use("/api/games", gameRouter);
 app.use("/api/auth",  authRouter);
+app.use("/api/votes", voteRouter);
+
 
 app.get("/", (req, res) => res.json({ message: "🏆 Sports Scoring API is running." }));
 
