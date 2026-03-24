@@ -728,22 +728,30 @@ exports.submitMultipleScores = async (req, res) => {
 
 exports.toggleGameVoting = async (req, res) => {
   try {
-    const { gameId } = req.params; // Must match :gameId in the route
-    const { enabled } = req.body;
+    const { gameId } = req.params;
+    // Force the input to be a strict Boolean (true or false)
+    // This prevents "true" (string) vs true (boolean) issues
+    const isEnabled = Boolean(req.body.enabled);
 
     const updatedGame = await Game.findOneAndUpdate(
-      { gameId: gameId }, // Searching your custom UUID field
-      { $set: { votingEnabled: enabled } },
-      { new: true }
+      { gameId: gameId }, 
+      { $set: { votingEnabled: isEnabled } },
+      { new: true, runValidators: true }
     );
 
     if (!updatedGame) {
-      return res.status(404).json({ message: "Game not found." });
+      return res.status(404).json({ message: "Game not found in database." });
     }
 
-    res.json({ votingEnabled: updatedGame.votingEnabled });
+    // Return the updated status and a clear message for the toast notification
+    res.json({ 
+      message: `Voting is now ${updatedGame.votingEnabled ? 'Open' : 'Closed'}`,
+      votingEnabled: updatedGame.votingEnabled 
+    });
+
   } catch (err) {
-    res.status(500).json({ message: "Server error" });
+    console.error("Toggle Error:", err);
+    res.status(500).json({ message: "Internal Server Error: Failed to toggle voting." });
   }
 };
 
