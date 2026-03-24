@@ -47,72 +47,58 @@ router.get("/:gameId", async (req, res) => {
   }
 });
 
-// 3. POST /api/votes/:gameId/apply-bonus — Admin applies 5-3-1 tiered points
+// 3. POST /api/votes/:gameId/apply-bonus
 router.post("/:gameId/apply-bonus", async (req, res) => {
   try {
     const { gameId } = req.params;
 
-    const game = await Game.findOne({ gameId });
+    const game = await Game.findOne({ gameId }); // Ensure this is the correct ID field
     if (!game) return res.status(404).json({ message: "Event not found." });
     
     if (game.bonusApplied) {
-      return res.status(400).json({ message: "Tiered bonuses have already been applied to this event." });
+      return res.status(400).json({ message: "Bonus already applied." });
     }
 
-    // Get current rankings
     const votes = await Vote.aggregate([
       { $match: { gameId } },
       { $group: { _id: "$house", count: { $sum: 1 } } },
       { $sort:  { count: -1 } },
     ]);
 
-    if (votes.length === 0) {
-      return res.status(400).json({ message: "No votes found. Cannot apply bonuses." });
-    }
+    if (votes.length === 0) return res.status(400).json({ message: "No votes found." });
 
     const bonusTiers = [5, 3, 1];
-    const updatePromises = [];
-    const breakdown = [];
-
-    // Map through top 3 houses and prepare updates
+    
+    // Use a for...of loop to handle async properly if needed
     for (let i = 0; i < Math.min(votes.length, bonusTiers.length); i++) {
       const houseName = votes[i]._id;
       const pointsToAdd = bonusTiers[i];
-      const rank = ["1st", "2nd", "3rd"][i];
 
-      updatePromises.push(
-        Game.updateOne(
-          { gameId, "houseScores.house": houseName },
-          { $inc: { "houseScores.$.points": pointsToAdd } }
-        )
+      await Game.updateOne(
+        { gameId, "houseScores.house": houseName },
+        { 
+          $inc: { "houseScores.$.points": pointsToAdd },
+          // Optional: If you want to force it live immediately:
+          $set: { published: true } 
+        }
       );
-
-      breakdown.push({ rank, house: houseName, points: pointsToAdd });
     }
 
-    // Mark as applied and store the winner
-    updatePromises.push(
-      Game.updateOne(
-        { gameId },
-        { $set: { bonusApplied: true, bonusHouse: votes[0]._id } }
-      )
-    );
+    // Mark the game as finalized
+    await Game.updateOne({ gameId }, { $set: { bonusApplied: true, votingEnabled: false } });
 
-    // Execute all updates in parallel
-    await Promise.all(updatePromises);
+    // 🚀 IMPORTANT: Fetch the FULL leaderboard data to broadcast, not just one game
+    // This ensures the total points on the big screen update instantly
+    const io = req.app.get("io");
+    if (io) {
+      // Broadcast to 'scoreUpdated' (matching your Leaderboard.jsx)
+      io.emit("scoreUpdated", { message: "Refresh Leaderboard", gameId });
+    }
 
-    // Broadcast updated scores to everyone via Socket.io
-    const updatedGame = await Game.findOne({ gameId });
-    req.app.get("io")?.emit("scoreUpdate", updatedGame);
-
-    res.json({
-      message: "Tiered bonus points applied!",
-      breakdown: breakdown.map(b => `${b.rank}: ${b.house} (+${b.points}pts)`),
-      winner: votes[0]._id
-    });
+    res.json({ message: "Tiered bonus points applied and results published!" });
   } catch (err) {
     console.error("Bonus Error:", err);
-    res.status(500).json({ message: "Server error applying bonus points." });
+    res.status(500).json({ message: "Server error." });
   }
 });
 
