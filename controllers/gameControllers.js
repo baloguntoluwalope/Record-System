@@ -379,62 +379,68 @@ exports.getPublicGame = async (req, res) => {
   }
 };
 
-// PUBLIC: Leaderboard
+// PUBLIC: Leaderboard with Parent Bonus + Judge Average + Medal Tie-Breaker
 exports.getLeaderboard = async (req, res) => {
   try {
-    // ✅ Only published games appear on the leaderboard
-    const games  = await Game.find({ published: true });
+    // 1. Fetch only published games
+    const games = await Game.find({ published: true });
     const totals = {};
 
+    // Helper: Calculation for a single house in a single game
+    // Formula: (Average of Judges) + Parent Bonus
+    const calculateGameScore = (hs) => {
+      const judgeSum = hs.judges.reduce((a, b) => a + b, 0);
+      const judgeAvg = hs.judges.length > 0 ? (judgeSum / hs.judges.length) : 0;
+      return judgeAvg + (hs.points || 0); 
+    };
+
+    // Helper: Sorting Logic (The Tie-Breaker)
+    // Primary: Points | Secondary: Gold | Tertiary: Silver | Quaternary: Bronze
+    const tieBreakerSort = (a, b) => {
+      if (b[1].points !== a[1].points) return b[1].points - a[1].points;
+      if (b[1].gold !== a[1].gold) return b[1].gold - a[1].gold;
+      if (b[1].silver !== a[1].silver) return b[1].silver - a[1].silver;
+      return b[1].bronze - a[1].bronze;
+    };
+
+    // Initialize house objects
     HOUSES.forEach((h) => {
       totals[h] = { points: 0, gold: 0, silver: 0, bronze: 0 };
     });
 
+    // --- 1. PROCESS GLOBAL TOTALS ---
     for (const game of games) {
       for (const hs of game.houseScores) {
-        if (!totals[hs.house]) {
-          totals[hs.house] = { points: 0, gold: 0, silver: 0, bronze: 0 };
-        }
-        totals[hs.house].points += hs.points;
-        totals[hs.house].gold   += hs.medals.gold;
-        totals[hs.house].silver += hs.medals.silver;
-        totals[hs.house].bronze += hs.medals.bronze;
+        if (!totals[hs.house]) totals[hs.house] = { points: 0, gold: 0, silver: 0, bronze: 0 };
+        
+        totals[hs.house].points += calculateGameScore(hs);
+        totals[hs.house].gold   += (hs.medals?.gold || 0);
+        totals[hs.house].silver += (hs.medals?.silver || 0);
+        totals[hs.house].bronze += (hs.medals?.bronze || 0);
       }
     }
 
-    // Overall leaderboard
-    const sorted = Object.entries(totals).sort((a, b) => b[1].points - a[1].points);
+    const sorted = Object.entries(totals).sort(tieBreakerSort);
     let rank = 1;
     const overallLeaderboard = sorted.map(([house, data], i) => {
-      if (i > 0 && data.points < sorted[i - 1][1].points) rank = i + 1;
+      // Logic: Only increment rank if the current house is actually worse than the previous one
+      if (i > 0) {
+        const prev = sorted[i - 1][1];
+        const isTie = data.points === prev.points && 
+                      data.gold === prev.gold && 
+                      data.silver === prev.silver && 
+                      data.bronze === prev.bronze;
+        if (!isTie) rank = i + 1;
+      }
       return {
         rank,
         house,
-        points:      data.points,
-        totalPoints: data.points,
-        medals: {
-          gold:   data.gold,
-          silver: data.silver,
-          bronze: data.bronze,
-        },
+        points: Number(data.points.toFixed(2)),
+        medals: { gold: data.gold, silver: data.silver, bronze: data.bronze },
       };
     });
 
-    // Medal table
-    const medalTable = Object.fromEntries(
-      Object.entries(totals).map(([house, data]) => [
-        house,
-        {
-          points:      data.points,
-          totalPoints: data.points,
-          gold:        data.gold,
-          silver:      data.silver,
-          bronze:      data.bronze,
-        },
-      ])
-    );
-
-    // Category leaderboard
+    // --- 2. PROCESS CATEGORY TABS ---
     const categoryLeaderboard = {};
     for (const category of CATEGORIES) {
       const catTotals = {};
@@ -442,35 +448,23 @@ exports.getLeaderboard = async (req, res) => {
 
       for (const game of games.filter((g) => g.category === category)) {
         for (const hs of game.houseScores) {
-          if (!catTotals[hs.house]) {
-            catTotals[hs.house] = { points: 0, gold: 0, silver: 0, bronze: 0 };
-          }
-          catTotals[hs.house].points += hs.points;
-          catTotals[hs.house].gold   += hs.medals.gold;
-          catTotals[hs.house].silver += hs.medals.silver;
-          catTotals[hs.house].bronze += hs.medals.bronze;
+          catTotals[hs.house].points += calculateGameScore(hs);
+          catTotals[hs.house].gold   += (hs.medals?.gold || 0);
+          catTotals[hs.house].silver += (hs.medals?.silver || 0);
+          catTotals[hs.house].bronze += (hs.medals?.bronze || 0);
         }
       }
 
-      const catSorted = Object.entries(catTotals).sort((a, b) => b[1].points - a[1].points);
-      let catRank = 1;
-      categoryLeaderboard[category] = catSorted.map(([house, data], i) => {
-        if (i > 0 && data.points < catSorted[i - 1][1].points) catRank = i + 1;
-        return {
-          rank:        catRank,
-          house,
-          points:      data.points,
-          totalPoints: data.points,
-          medals: {
-            gold:   data.gold,
-            silver: data.silver,
-            bronze: data.bronze,
-          },
-        };
-      });
+      const catSorted = Object.entries(catTotals).sort(tieBreakerSort);
+      categoryLeaderboard[category] = catSorted.map(([house, data], i) => ({
+        rank: i + 1, // Simplified rank for categories
+        house,
+        points: Number(data.points.toFixed(2)),
+        medals: { gold: data.gold, silver: data.silver, bronze: data.bronze },
+      }));
     }
 
-    // Gender leaderboard
+    // --- 3. PROCESS GENDER TABS ---
     const genderLeaderboard = {};
     for (const gender of GENDERS) {
       const genTotals = {};
@@ -478,54 +472,40 @@ exports.getLeaderboard = async (req, res) => {
 
       for (const game of games.filter((g) => g.gender === gender)) {
         for (const hs of game.houseScores) {
-          if (!genTotals[hs.house]) {
-            genTotals[hs.house] = { points: 0, gold: 0, silver: 0, bronze: 0 };
-          }
-          genTotals[hs.house].points += hs.points;
-          genTotals[hs.house].gold   += hs.medals.gold;
-          genTotals[hs.house].silver += hs.medals.silver;
-          genTotals[hs.house].bronze += hs.medals.bronze;
+          genTotals[hs.house].points += calculateGameScore(hs);
+          genTotals[hs.house].gold   += (hs.medals?.gold || 0);
+          genTotals[hs.house].silver += (hs.medals?.silver || 0);
+          genTotals[hs.house].bronze += (hs.medals?.bronze || 0);
         }
       }
 
-      const genSorted = Object.entries(genTotals).sort((a, b) => b[1].points - a[1].points);
-      let genRank = 1;
-      genderLeaderboard[gender] = genSorted.map(([house, data], i) => {
-        if (i > 0 && data.points < genSorted[i - 1][1].points) genRank = i + 1;
-        return {
-          rank:        genRank,
-          house,
-          points:      data.points,
-          totalPoints: data.points,
-          medals: {
-            gold:   data.gold,
-            silver: data.silver,
-            bronze: data.bronze,
-          },
-        };
-      });
+      const genSorted = Object.entries(genTotals).sort(tieBreakerSort);
+      genderLeaderboard[gender] = genSorted.map(([house, data], i) => ({
+        rank: i + 1,
+        house,
+        points: Number(data.points.toFixed(2)),
+        medals: { gold: data.gold, silver: data.silver, bronze: data.bronze },
+      }));
     }
 
-    const houseTotals = Object.entries(totals)
-      .sort((a, b) => b[1].points - a[1].points)
-      .map(([house, data], i) => ({
-        rank:        i + 1,
+    // Final medal table for the UI summary cards
+    const medalTable = Object.fromEntries(
+      Object.entries(totals).map(([house, data]) => [
         house,
-        points:      data.points,
-        totalPoints: data.points,
-        gold:        data.gold,
-        silver:      data.silver,
-        bronze:      data.bronze,
-      }));
+        { gold: data.gold, silver: data.silver, bronze: data.bronze },
+      ])
+    );
 
     return res.json({
-      houseTotals,
+      houseTotals: overallLeaderboard, // Simplified for frontend
       overallLeaderboard,
       categoryLeaderboard,
       genderLeaderboard,
       medalTable,
     });
+
   } catch (error) {
+    console.error("Leaderboard Error:", error);
     return res.status(500).json({ message: error.message });
   }
 };
