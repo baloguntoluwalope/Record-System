@@ -38,7 +38,7 @@ router.post("/unpublish/:gameId",       adminAuth, unpublishGame);
 router.put("/update/:gameId",           adminAuth, updateGame);
 router.delete("/delete/:gameId",        adminAuth, deleteGame);
 // PATCH /api/games/:gameId/toggle-voting
-router.patch("/:gameId/toggle-voting",    toggleGameVoting);
+router.patch("/:gameId/toggle-voting",   adminAuth, toggleGameVoting);
 // Judge — parameterized (keep at bottom to avoid route conflicts)
 router.post("/:gameId/result",          judgeAuth, scoreLimiter, submitResult);
 router.post("/:category/:gender/score", judgeAuth, scoreLimiter, submitResultByCategoryAndGender);
