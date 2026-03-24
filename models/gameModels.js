@@ -26,13 +26,19 @@ const gameSchema = new mongoose.Schema(
       enum: ["Boys", "Girls", "Mixed"],
       required: true,
     },
+
     gameId: { type: String, index: true },
 
     houses:      [{ type: String }],
     houseScores: [houseScoreSchema],
 
     published:  { type: Boolean, default: false },
-   publicLink: { type: String }, // remove unique index
+    publicLink: { type: String },
+
+    // ── Parent voting ────────────────────────────────────────
+    votingEnabled: { type: Boolean, default: false },
+    bonusApplied:  { type: Boolean, default: false },
+    bonusHouse:    { type: String,  default: null  },
   },
   { timestamps: true }
 );

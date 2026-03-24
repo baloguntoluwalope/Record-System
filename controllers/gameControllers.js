@@ -729,32 +729,30 @@ exports.submitMultipleScores = async (req, res) => {
 exports.toggleGameVoting = async (req, res) => {
   try {
     const { gameId } = req.params;
-    // Force the input to be a strict Boolean (true or false)
-    // This prevents "true" (string) vs true (boolean) issues
     const isEnabled = Boolean(req.body.enabled);
 
     const updatedGame = await Game.findOneAndUpdate(
-      { gameId: gameId }, 
+      { gameId }, 
       { $set: { votingEnabled: isEnabled } },
-      { new: true, runValidators: true }
+      { new: true }
     );
 
-    if (!updatedGame) {
-      return res.status(404).json({ message: "Game not found in database." });
-    }
+    if (!updatedGame) return res.status(404).json({ message: "Game not found." });
 
-    // Return the updated status and a clear message for the toast notification
+    // CRITICAL: Tell the frontend to refresh immediately!
+    req.app.get("io")?.emit("votingStatusChanged", { 
+      gameId, 
+      votingEnabled: updatedGame.votingEnabled 
+    });
+
     res.json({ 
       message: `Voting is now ${updatedGame.votingEnabled ? 'Open' : 'Closed'}`,
       votingEnabled: updatedGame.votingEnabled 
     });
-
   } catch (err) {
-    console.error("Toggle Error:", err);
-    res.status(500).json({ message: "Internal Server Error: Failed to toggle voting." });
+    res.status(500).json({ message: "Server error" });
   }
 };
-
 // const crypto   = require("crypto");
 // const { randomUUID } = require("crypto");
 // const mongoose = require("mongoose");
